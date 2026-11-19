@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>thundu seetu</title>
+  <meta name="description" content="Split trip expenses with friends, entirely offline. Paper slips, reconciled.">
+  <meta name="theme-color" content="#efe7d6" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1c1a16" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Seetu">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <main id="app" aria-live="polite">
+    <p class="boot">Unfolding the slips…</p>
+  </main>
+  <div id="sheet-root"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <input type="file" id="file-in" accept="application/json,.json,.seetu" multiple hidden>
+</body>
+</html>
