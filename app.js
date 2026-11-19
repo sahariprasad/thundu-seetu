@@ -1,6 +1,7 @@
 // app.js — screens and wiring. All logic that touches money lives in core.js.
 import * as C from './core.js';
 import * as DB from './db.js';
+import * as Q from './qr.js';
 
 // ================================================================ helpers
 
@@ -143,6 +144,7 @@ function homeView() {
     <div class="stack" style="margin-top:30px">
       <a class="btn block" href="#/new">Start a new trip</a>
       <button class="btn ghost block" data-act="import">Take in a pile from a friend</button>
+      <button class="btn quiet block" data-act="qr-scan">…or scan their QR code</button>
     </div>
     <p class="muted small" style="text-align:center;margin-top:14px">
       Joining someone's trip? Ask them to AirDrop their pile (Pass around → Send my pile), then tap above.
@@ -484,6 +486,16 @@ function passView(g, st) {
         Taking in the same pile twice is harmless.</p>
     </div></div>
 
+    <div class="slip" style="--tilt:.3deg"><div class="paper torn">
+      <h2 class="card-title">No AirDrop? Use the camera</h2>
+      <p class="small" style="margin:0 0 12px">One phone shows its pile as a run of QR codes; the other scans until it has every piece.
+        Works with Wi-Fi and Bluetooth off — the same steps as above, just by camera.</p>
+      <div class="row">
+        <button class="btn ghost grow" data-act="qr-show">Show my pile</button>
+        <button class="btn ghost grow" data-act="qr-scan">Scan a pile</button>
+      </div>
+    </div></div>
+
     <div class="slip" style="--tilt:-.25deg"><div class="paper torn">
       <h2 class="card-title">Who's written what</h2>
       <ul class="who-wrote">
@@ -556,8 +568,11 @@ const rateRow = (cur, base, rate) => `
 // ================================================================ slip sheet (add / edit)
 
 let draft = null;
+let sheetCleanup = null;   // stops cameras / timers when a sheet closes
 
 function closeSheet() {
+  sheetCleanup?.();
+  sheetCleanup = null;
   draft = null;
   $('#sheet-root').innerHTML = '';
   document.body.style.overflow = '';
@@ -947,11 +962,21 @@ function sendPile(g) {
 }
 
 async function importFiles(files) {
+  const items = [];
+  for (const f of files) {
+    try { items.push({ name: f.name, text: await f.text() }); } catch (e) { items.push({ name: f.name, error: e.message }); }
+  }
+  return importTexts(items);
+}
+
+/** Take in piles, whether they came as AirDropped files or through the camera. */
+async function importTexts(items) {
   const byTrip = new Map();
   const errors = [];
-  for (const f of files) {
+  for (const f of items) {
     try {
-      const b = C.parseBundle(await f.text());
+      if (f.error) throw new Error(f.error);
+      const b = C.parseBundle(f.text);
       const t = byTrip.get(b.group) || { files: 0, from: [], added: 0, isNew: !state(b.group).group };
       t.files++;
       if (b.from && !t.from.includes(b.from)) t.from.push(b.from);
@@ -980,6 +1005,224 @@ async function importFiles(files) {
   if (byTrip.size === 1) go(`#/t/${encodeURIComponent(g)}/${t.isNew ? 'slips' : 'pass'}`);
   else render();
   toast(t.isNew ? `Joined “${state(g).group.name}”` : total ? `Took in ${total} new note${total > 1 ? 's' : ''}` : 'Already had all of that');
+}
+
+// ================================================================ passing piles by camera (QR)
+
+const scriptLoads = {};
+function loadScript(src) {
+  return (scriptLoads[src] ??= new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = () => { delete scriptLoads[src]; reject(new Error(`Couldn't load ${src}`)); };
+    document.head.append(s);
+  }));
+}
+const loadQrEncoder = () => loadScript('vendor/qrcode.js').then(() => window.qrcode);
+const loadQrReader = () => loadScript('vendor/jsQR.js').then(() => window.jsQR.default || window.jsQR);
+
+const META_KINDS = new Set(['group.create', 'group.update', 'member.add', 'member.update', 'rate.set']);
+const QR_SPEEDS = { normal: 250, slow: 600 };
+
+/** State of the "show my pile as QR" sheet, so its buttons can reach it. */
+let qrShow = null;
+
+function sheetShell(title, body) {
+  $('#sheet-root').innerHTML = `
+    <div class="sheet-backdrop" data-act="close-sheet"></div>
+    <div class="sheet plain" role="dialog" aria-label="${esc(title)}">
+      <div class="sheet-head">
+        <button type="button" class="btn quiet sm" data-act="close-sheet">Close</button>
+        <h2>${esc(title)}</h2>
+        <span style="width:64px"></span>
+      </div>
+      ${body}
+    </div>`;
+  document.body.style.overflow = 'hidden';
+}
+
+async function openQrShow(g) {
+  const st = state(g);
+  const all = pile(g);
+  const since = S.sentAt[g] || 0;
+  const mine = all.filter((e) => e.a === S.device && e.t > since);
+  const myName = nameOf(st, meOf(g));
+
+  sheetShell('Show my pile', `
+    <div class="qr-wrap"><canvas id="qr-canvas" aria-label="QR code"></canvas></div>
+    <p class="qr-caption type" id="qr-caption">Folding the slips…</p>
+    <div class="seg" id="qr-modes" hidden></div>
+    <p class="small muted" style="margin:12px 0 0">
+      Hold this phone still and turn the brightness up. On the other phone: Pass around → <b>Scan a pile</b>.
+      It keeps watching until it has every piece — missed ones come round again.
+    </p>
+    <div class="row" style="margin-top:14px;justify-content:space-between">
+      <button class="btn quiet sm" data-act="qr-speed" id="qr-speed">Slower</button>
+      <button class="btn ghost sm" data-act="close-sheet">Done</button>
+    </div>`);
+
+  const ctl = { g, mode: 'all', speed: 'normal', i: 0, frames: [], qrs: [], timer: null, wake: null, closed: false, sets: {} };
+  qrShow = ctl;
+  sheetCleanup = () => {
+    ctl.closed = true;
+    clearInterval(ctl.timer);
+    ctl.wake?.release?.().catch(() => {});
+    qrShow = null;
+  };
+
+  try {
+    const [qrLib] = await Promise.all([loadQrEncoder()]);
+    ctl.qrLib = qrLib;
+    const pack = async (events) => Q.toFrames(await Q.pack(JSON.stringify(C.makeBundle(st, events, myName))));
+    ctl.sets.all = await pack(all);
+    // A small "just what's new from me" pile, plus the trip/people so it stands on its own.
+    if (mine.length && mine.length < all.length - all.filter((e) => META_KINDS.has(e.k)).length) {
+      ctl.sets.mine = await pack([...all.filter((e) => META_KINDS.has(e.k) && !mine.includes(e)), ...mine]);
+    }
+  } catch (e) {
+    $('#qr-caption').textContent = `Couldn't make the QR codes: ${e.message}`;
+    return;
+  }
+  if (ctl.closed) return;
+
+  if (ctl.sets.mine) {
+    const n = (k) => ctl.sets[k].length;
+    const modes = $('#qr-modes');
+    modes.hidden = false;
+    modes.innerHTML = `
+      <button type="button" data-act="qr-mode" data-v="all" aria-pressed="true">Everything · ${n('all')} piece${n('all') > 1 ? 's' : ''}</button>
+      <button type="button" data-act="qr-mode" data-v="mine" aria-pressed="false">Just my new · ${n('mine')}</button>`;
+  }
+  try { ctl.wake = await navigator.wakeLock?.request('screen'); } catch { /* screen may dim; that's ok */ }
+  setQrFrames(ctl, ctl.mode);
+}
+
+function setQrFrames(ctl, mode) {
+  ctl.mode = mode;
+  ctl.frames = ctl.sets[mode];
+  ctl.qrs = [];
+  ctl.i = 0;
+  clearInterval(ctl.timer);
+  const tick = () => {
+    if (ctl.closed) return;
+    const i = ctl.i;
+    drawQr($('#qr-canvas'), ctl, i);
+    const n = ctl.frames.length;
+    $('#qr-caption').textContent = n === 1 ? 'All in one code' : `piece ${i + 1} of ${n}`;
+    ctl.i = (i + 1) % n;
+  };
+  tick();
+  if (ctl.frames.length > 1) ctl.timer = setInterval(tick, QR_SPEEDS[ctl.speed]);
+}
+
+function drawQr(canvas, ctl, i) {
+  if (!canvas) return;
+  let qr = ctl.qrs[i];
+  if (!qr) {
+    qr = ctl.qrLib(0, 'L');
+    qr.addData(Q.toBinaryString(ctl.frames[i]), 'Byte');
+    qr.make();
+    ctl.qrs[i] = qr;
+  }
+  const n = qr.getModuleCount();
+  const quiet = 4;
+  const total = n + quiet * 2;
+  const css = Math.min(window.innerWidth - 56, 440);
+  const dpr = window.devicePixelRatio || 1;
+  const cell = Math.max(1, Math.floor((css * dpr) / total));
+  const px = cell * total;
+  if (canvas.width !== px) {
+    canvas.width = canvas.height = px;
+    canvas.style.width = canvas.style.height = `${px / dpr}px`;
+  }
+  const g = canvas.getContext('2d');
+  g.fillStyle = '#fff';
+  g.fillRect(0, 0, px, px);
+  g.fillStyle = '#000';
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) if (qr.isDark(r, c)) g.fillRect((c + quiet) * cell, (r + quiet) * cell, cell, cell);
+  }
+}
+
+async function openQrScan() {
+  sheetShell('Scan a pile', `
+    <div class="scan-box"><video id="scan-video" playsinline muted autoplay></video><div class="scan-frame"></div></div>
+    <p class="qr-caption" id="scan-status">Opening the camera…</p>
+    <div class="pieces" id="scan-pieces" aria-hidden="true"></div>
+    <p class="small muted" style="margin:12px 0 0">Point at the QR code on the other phone and hold steady. Pieces fill in as they're caught, in any order.</p>`);
+
+  const asm = new Q.Assembler();
+  const ctl = { stream: null, raf: 0, closed: false };
+  sheetCleanup = () => {
+    ctl.closed = true;
+    cancelAnimationFrame(ctl.raf);
+    ctl.stream?.getTracks().forEach((t) => t.stop());
+  };
+  const status = (t, cls = '') => { const el = $('#scan-status'); if (el) { el.textContent = t; el.className = `qr-caption ${cls}`; } };
+
+  let jsQR;
+  try {
+    jsQR = await loadQrReader();
+    ctl.stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false,
+    });
+  } catch (e) {
+    status(e.name === 'NotAllowedError'
+      ? 'Camera access was refused. Allow the camera for this app (Settings → Safari → Camera), then try again.'
+      : `Couldn't open the camera: ${e.message}`, 'bad');
+    return;
+  }
+  if (ctl.closed) { ctl.stream.getTracks().forEach((t) => t.stop()); return; }
+
+  const video = $('#scan-video');
+  video.srcObject = ctl.stream;
+  await video.play().catch(() => {});
+  status('Looking for a QR code…');
+
+  const grab = document.createElement('canvas');
+  const g = grab.getContext('2d', { willReadFrequently: true });
+  let warned = false;
+
+  const showPieces = () => {
+    const el = $('#scan-pieces');
+    if (!el) return;
+    el.innerHTML = Array.from({ length: asm.count }, (_, i) => `<i class="${asm.pieces.has(i) ? 'got' : ''}"></i>`).join('');
+    status(asm.count === 1 ? 'Got it' : `${asm.have} of ${asm.count} pieces`);
+  };
+
+  const finish = async () => {
+    sheetCleanup?.();
+    sheetCleanup = null;
+    status('Got every piece — unfolding…', 'good');
+    try {
+      const text = await Q.unpack(asm.bytes());
+      closeSheet();
+      await importTexts([{ name: 'QR pile', text }]);
+    } catch (e) {
+      status(`That pile didn't unfold: ${e.message}. Try again.`, 'bad');
+    }
+  };
+
+  const loop = () => {
+    if (ctl.closed) return;
+    const vw = video.videoWidth, vh = video.videoHeight;
+    if (video.readyState >= 2 && vw) {
+      const side = Math.min(vw, vh);
+      const size = Math.min(side, 720);
+      if (grab.width !== size) grab.width = grab.height = size;
+      g.drawImage(video, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, size, size);
+      const code = jsQR(g.getImageData(0, 0, size, size).data, size, size, { inversionAttempts: 'dontInvert' });
+      if (code?.binaryData?.length) {
+        const r = asm.add(code.binaryData);
+        if (r === 'new' || r === 'restart') { showPieces(); }
+        else if (r === 'foreign' && !asm.count && !warned) { warned = true; status("That QR code isn't a seetu pile", 'bad'); }
+        if (asm.done) { finish(); return; }
+      }
+    }
+    ctl.raf = requestAnimationFrame(loop);
+  };
+  loop();
 }
 
 // ================================================================ actions
@@ -1054,6 +1297,19 @@ const ACT = {
   'pay-to'(el) { draft.to = el.dataset.id; pressOnly(el); },
 
   send() { sendPile(route().g); },
+  'qr-show'() { openQrShow(route().g); },
+  'qr-scan'() { openQrScan(); },
+  'qr-mode'(el) {
+    if (!qrShow) return;
+    pressOnly(el);
+    setQrFrames(qrShow, el.dataset.v);
+  },
+  'qr-speed'(el) {
+    if (!qrShow) return;
+    qrShow.speed = qrShow.speed === 'normal' ? 'slow' : 'normal';
+    el.textContent = qrShow.speed === 'normal' ? 'Slower' : 'Faster';
+    setQrFrames(qrShow, qrShow.mode);
+  },
   backup() { shareOrDownload(pileFile(route().g)); },
   csv() {
     const st = state(route().g);
@@ -1122,7 +1378,7 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     e.target.click();
   }
-  if (e.key === 'Escape' && draft) closeSheet();
+  if (e.key === 'Escape' && $('#sheet-root').children.length) closeSheet();
 });
 
 document.addEventListener('input', (e) => {

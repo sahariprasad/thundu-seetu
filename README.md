@@ -13,7 +13,17 @@ matches on every phone, you're reconciled.
 | `core.js` | All the money logic. Events, splits (equal / amounts / % / shares / extras), balances, settle-up, pile files. No DOM, so it's tested in Node. |
 | `db.js` | This phone's pile, stored in IndexedDB. |
 | `app.js` | Screens: Slips, Tally, Pass around, Trip. |
+| `qr.js` | Camera fallback. Compresses a pile, cuts it into numbered pieces and reassembles them. |
+| `vendor/` | QR drawing (`qrcode-generator`) and reading (`jsQR`), copied in so they work offline. Versions and hashes are in `vendor/README.md`. |
 | `sw.js` | Service worker that keeps the app on the phone so it opens offline. |
+
+### Two ways to pass a pile
+
+- **AirDrop** (Pass around → *Send my pile* / *Take in piles*). Fastest, and handles several piles at once.
+- **Camera** (Pass around → *Show my pile* / *Scan a pile*). Needs no radios at all. One phone cycles
+  through QR codes; the other scans until every piece is in, catching them in any order. A whole
+  9-day trip is about 40 codes, roughly 10–20 seconds. *Just my new* sends only what you've written
+  since you last sent, which is usually one code.
 
 - **Nothing is ever overwritten.** Adding, editing and deleting all write a *new* event. Merging two
   phones is a union of events, so order doesn't matter and taking in the same pile twice is harmless.
@@ -49,6 +59,7 @@ On each iPhone/iPad:
 - [ ] **Turn on airplane mode**, then switch Wi-Fi and Bluetooth back on. Add a slip on each phone.
 - [ ] Do one full evening reconcile and check all four pile codes match.
 - [ ] Set AirDrop to *Everyone for 10 minutes* or add each other as contacts. AirDrop between strangers is limited.
+- [ ] Try the camera route once too (Show my pile → Scan a pile), and allow camera access when asked.
 
 ## Updating the app
 

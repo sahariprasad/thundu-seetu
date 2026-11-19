@@ -2,7 +2,7 @@
 // Bump VERSION whenever any app file changes, so phones pick up the new copy
 // (next time they open the app while online).
 
-const VERSION = 'seetu-v1';
+const VERSION = 'seetu-v2';
 const FILES = [
   './',
   './index.html',
@@ -10,6 +10,9 @@ const FILES = [
   './app.js',
   './core.js',
   './db.js',
+  './qr.js',
+  './vendor/qrcode.js',
+  './vendor/jsQR.js',
   './manifest.webmanifest',
   './icons/icon.svg',
   './icons/icon-180.png',
