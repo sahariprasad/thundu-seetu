@@ -143,11 +143,11 @@ function homeView() {
       </div>`}
     <div class="stack" style="margin-top:30px">
       <a class="btn block" href="#/new">Start a new trip</a>
-      <button class="btn ghost block" data-act="import">Take in a pile from a friend</button>
-      <button class="btn quiet block" data-act="qr-scan">…or scan their QR code</button>
+      <button class="btn ghost block" data-act="qr-scan">Join a friend's trip — scan their pile</button>
+      <button class="btn quiet block" data-act="import">…or take in an AirDropped pile</button>
     </div>
     <p class="muted small" style="text-align:center;margin-top:14px">
-      Joining someone's trip? Ask them to AirDrop their pile (Pass around → Send my pile), then tap above.
+      Joining someone's trip? Ask them to open Pass around → <b>Show my pile</b>, then scan it.
     </p>`;
 }
 
@@ -218,7 +218,7 @@ async function createTrip(form) {
     ...friends.map((n) => ['member.add', { id: uuid(), name: n }]),
   ]);
   go(`#/t/${encodeURIComponent(g)}/slips`);
-  toast('Bundle started. Pass your pile to friends when you meet up.');
+  toast('Bundle started. Friends join by scanning: Pass around → Show my pile.');
 }
 
 // ================================================================ who am I
@@ -475,24 +475,26 @@ function passView(g, st) {
 
     <div class="slip" style="--tilt:.2deg"><div class="paper torn">
       <h2 class="card-title">Reconciling, the evening way</h2>
+      <div class="row" style="margin:0 0 16px">
+        <button class="btn grow" data-act="qr-show">Show my pile</button>
+        <button class="btn ghost grow" data-act="qr-scan">Scan a pile</button>
+      </div>
       <ol class="steps">
-        <li>Everyone taps <b>Send my pile</b> and AirDrops it to one person — the keeper.
-          <div style="margin-top:8px"><button class="btn block" data-act="send">Send my pile</button></div></li>
-        <li>The keeper taps <b>Take in piles</b> and picks all the files at once.
-          <div style="margin-top:8px"><button class="btn ghost block" data-act="import">Take in piles</button></div></li>
-        <li>The keeper sends their pile back to everyone, and everyone takes it in. Now all the codes match.</li>
+        <li>Pick a keeper. One by one, everyone taps <b>Show my pile</b> and the keeper taps <b>Scan a pile</b>.</li>
+        <li>The keeper taps <b>Show my pile</b>, and everyone else scans it. Several phones can scan the same screen at once.</li>
+        <li>Check that every phone shows the same pile code above. That's it, reconciled.</li>
       </ol>
-      <p class="muted small" style="margin:0">AirDrop needs no signal — just keep Wi-Fi and Bluetooth switched on (airplane mode is fine).
-        Taking in the same pile twice is harmless.</p>
+      <p class="muted small" style="margin:0">Works with no signal and with Wi-Fi and Bluetooth off. It's only the camera.
+        Turn the showing phone's brightness up. Scanning the same pile twice is harmless.</p>
     </div></div>
 
     <div class="slip" style="--tilt:.3deg"><div class="paper torn">
-      <h2 class="card-title">No AirDrop? Use the camera</h2>
-      <p class="small" style="margin:0 0 12px">One phone shows its pile as a run of QR codes; the other scans until it has every piece.
-        Works with Wi-Fi and Bluetooth off — the same steps as above, just by camera.</p>
+      <h2 class="card-title">Or use AirDrop</h2>
+      <p class="small" style="margin:0 0 12px">Same idea, sent as a file. Handy for the keeper, who can take in everyone's files in one go.
+        Needs Wi-Fi and Bluetooth switched on, but airplane mode is fine.</p>
       <div class="row">
-        <button class="btn ghost grow" data-act="qr-show">Show my pile</button>
-        <button class="btn ghost grow" data-act="qr-scan">Scan a pile</button>
+        <button class="btn ghost grow" data-act="send">Send my pile</button>
+        <button class="btn ghost grow" data-act="import">Take in piles</button>
       </div>
     </div></div>
 
@@ -1054,15 +1056,16 @@ async function openQrShow(g) {
     <p class="qr-caption type" id="qr-caption">Folding the slips…</p>
     <div class="seg" id="qr-modes" hidden></div>
     <p class="small muted" style="margin:12px 0 0">
-      Hold this phone still and turn the brightness up. On the other phone: Pass around → <b>Scan a pile</b>.
-      It keeps watching until it has every piece — missed ones come round again.
+      Hold this phone still and turn the brightness up. On the other phone: Pass around → <b>Scan a pile</b>
+      (or, for a friend who's joining, <b>Join a friend's trip</b> on the home screen).
+      It keeps watching until it has every piece. Missed ones come round again.
     </p>
     <div class="row" style="margin-top:14px;justify-content:space-between">
       <button class="btn quiet sm" data-act="qr-speed" id="qr-speed">Slower</button>
-      <button class="btn ghost sm" data-act="close-sheet">Done</button>
+      <button class="btn sm" data-act="qr-done">They've got it</button>
     </div>`);
 
-  const ctl = { g, mode: 'all', speed: 'normal', i: 0, frames: [], qrs: [], timer: null, wake: null, closed: false, sets: {} };
+  const ctl = { g, mode: 'all', speed: 'normal', i: 0, frames: [], qrs: [], timer: null, wake: null, closed: false, sets: {}, openedAt: S.clock };
   qrShow = ctl;
   sheetCleanup = () => {
     ctl.closed = true;
@@ -1299,6 +1302,16 @@ const ACT = {
   send() { sendPile(route().g); },
   'qr-show'() { openQrShow(route().g); },
   'qr-scan'() { openQrScan(); },
+  async 'qr-done'() {
+    // Someone scanned it: what this phone wrote up to now counts as passed around.
+    const ctl = qrShow;
+    closeSheet();
+    if (!ctl) return;
+    S.sentAt[ctl.g] = Math.max(S.sentAt[ctl.g] || 0, ctl.openedAt);
+    await DB.setMeta(`sent:${ctl.g}`, S.sentAt[ctl.g]);
+    render();
+    toast('Pile passed. Check the pile codes match.');
+  },
   'qr-mode'(el) {
     if (!qrShow) return;
     pressOnly(el);

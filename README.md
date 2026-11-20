@@ -3,7 +3,7 @@
 *A pocket of paper slips, reconciled.* Split trip expenses with friends with no internet at all.
 
 Every expense is a slip of paper. Each phone keeps its own pile. In the evening, everyone passes
-their pile around (AirDrop), and every phone ends up holding the same slips. When the **pile code**
+their pile around by scanning QR codes, and every phone ends up holding the same slips. When the **pile code**
 matches on every phone, you're reconciled.
 
 ## How it works
@@ -13,17 +13,25 @@ matches on every phone, you're reconciled.
 | `core.js` | All the money logic. Events, splits (equal / amounts / % / shares / extras), balances, settle-up, pile files. No DOM, so it's tested in Node. |
 | `db.js` | This phone's pile, stored in IndexedDB. |
 | `app.js` | Screens: Slips, Tally, Pass around, Trip. |
-| `qr.js` | Camera fallback. Compresses a pile, cuts it into numbered pieces and reassembles them. |
+| `qr.js` | Camera syncing (the main way to pass piles). Compresses a pile, cuts it into numbered pieces and reassembles them. |
 | `vendor/` | QR drawing (`qrcode-generator`) and reading (`jsQR`), copied in so they work offline. Versions and hashes are in `vendor/README.md`. |
 | `sw.js` | Service worker that keeps the app on the phone so it opens offline. |
 
 ### Two ways to pass a pile
 
-- **AirDrop** (Pass around → *Send my pile* / *Take in piles*). Fastest, and handles several piles at once.
-- **Camera** (Pass around → *Show my pile* / *Scan a pile*). Needs no radios at all. One phone cycles
-  through QR codes; the other scans until every piece is in, catching them in any order. A whole
-  9-day trip is about 40 codes, roughly 10–20 seconds. *Just my new* sends only what you've written
-  since you last sent, which is usually one code.
+- **Camera, the main way** (Pass around → *Show my pile* / *Scan a pile*). Needs no radios at all. One
+  phone cycles through QR codes; the other scans until every piece is in, catching them in any order.
+  Several phones can scan the same screen at once. A whole 9-day trip is about 40 codes, roughly
+  10–20 seconds. *Just my new* sends only what you've written since you last passed your pile, which
+  is usually one code. Tap *They've got it* when done so the app knows those slips have gone round.
+- **AirDrop, the alternative** (*Send my pile* / *Take in piles*). Sends the pile as a file. The keeper
+  can take in several files at once. Needs Wi-Fi and Bluetooth switched on.
+
+### The evening reconcile
+
+1. Pick a keeper. One by one, everyone shows their pile and the keeper scans it.
+2. The keeper shows their pile, and everyone scans it.
+3. Check every phone shows the same pile code.
 
 - **Nothing is ever overwritten.** Adding, editing and deleting all write a *new* event. Merging two
   phones is a union of events, so order doesn't matter and taking in the same pile twice is harmless.
@@ -55,11 +63,10 @@ On each iPhone/iPad:
 ## Before you leave: dress rehearsal
 
 - [ ] Everyone has it on their Home Screen; one person creates the trip.
-- [ ] The creator sends their pile, and everyone else takes it in (Home → *Take in a pile*) and picks their name.
-- [ ] **Turn on airplane mode**, then switch Wi-Fi and Bluetooth back on. Add a slip on each phone.
+- [ ] The creator opens Pass around → *Show my pile*; everyone else taps Home → *Join a friend's trip*, scans, and picks their name. Allow camera access when asked.
+- [ ] **Turn on airplane mode**. Add a slip on each phone.
 - [ ] Do one full evening reconcile and check all four pile codes match.
-- [ ] Set AirDrop to *Everyone for 10 minutes* or add each other as contacts. AirDrop between strangers is limited.
-- [ ] Try the camera route once too (Show my pile → Scan a pile), and allow camera access when asked.
+- [ ] Try the AirDrop route once too, as a backup. Set AirDrop to *Everyone for 10 minutes* or add each other as contacts first.
 
 ## Updating the app
 
