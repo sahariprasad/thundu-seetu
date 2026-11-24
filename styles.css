@@ -506,6 +506,73 @@ input[type="date"].line-in { font-family: var(--ui); font-size: 16px; min-height
 }
 @keyframes grow { from { transform: scaleX(0); } }
 
+/* Tabs slide in from the side that was tapped. */
+.tab-body.from-right { animation: from-right .28s cubic-bezier(.2, .8, .3, 1); }
+.tab-body.from-left  { animation: from-left .28s cubic-bezier(.2, .8, .3, 1); }
+@keyframes from-right { from { opacity: 0; transform: translateX(28px); } }
+@keyframes from-left  { from { opacity: 0; transform: translateX(-28px); } }
+
+/* Slips (and trip bundles) are dealt onto the desk one after another. */
+.slip.deal, .bundle.deal {
+  animation: deal .42s cubic-bezier(.2, .8, .3, 1) both;
+  animation-delay: calc(var(--n, 0) * 45ms);
+}
+@keyframes deal {
+  from { opacity: 0; transform: translateY(18px) rotate(calc(var(--tilt, 0deg) - 2deg)); }
+  to   { transform: rotate(var(--tilt, 0deg)); }
+}
+
+/* Opening a trip fans its bundle out. */
+.bundle::before, .bundle::after, .bundle-btn { transition: transform .22s cubic-bezier(.3, .7, .4, 1.3); }
+.bundle.opening::before { transform: rotate(6deg) translate(12px, 6px); }
+.bundle.opening::after  { transform: rotate(-5deg) translate(-12px, 4px); }
+.bundle.opening .bundle-btn { transform: translateY(-4px) scale(1.02); }
+
+/* Booting: the waiting line rocks gently. */
+.boot { animation: wobble 1.6s ease-in-out infinite; }
+@keyframes wobble { 0%, 100% { transform: rotate(-1.5deg); } 50% { transform: rotate(1.5deg); } }
+
+/* Empty pile: the lone slip floats. */
+.empty .slip { animation: float 4.5s ease-in-out infinite; }
+@keyframes float {
+  0%, 100% { transform: translateY(0) rotate(var(--tilt, 0deg)); }
+  50%      { transform: translateY(-5px) rotate(calc(var(--tilt, 0deg) - .6deg)); }
+}
+
+/* Leaving someone out of a split draws a pencil line through their name. */
+.person[aria-checked="false"] .name { text-decoration: none; }
+.person .nm {
+  background: linear-gradient(var(--faint), var(--faint)) no-repeat 0 58% / 0 1.5px;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+  transition: background-size .28s ease-out, color .2s;
+}
+.person[aria-checked="false"] .nm { background-size: 100% 1.5px; }
+
+/* QR pieces pop in as they're caught, then gather into one stack. */
+.pieces i.got { animation: pop .3s cubic-bezier(.3, 1.6, .5, 1); }
+@keyframes pop { 0% { transform: scale(.4); } 60% { transform: scale(1.35) rotate(-8deg); } }
+.pieces { transition: gap .45s ease-in-out; }
+.pieces i { transition: background .15s, transform .45s ease-in-out, margin .45s ease-in-out; }
+.pieces.done { gap: 4px 0; }
+.pieces.done i { margin-left: -8px; }
+.pieces.done i:nth-child(3n)   { transform: rotate(5deg); }
+.pieces.done i:nth-child(3n+1) { transform: rotate(-4deg); }
+
+/* A sent pile flies off. */
+.flyer {
+  position: fixed; z-index: 50; width: 56px; height: 36px; pointer-events: none;
+  border-radius: 2px; filter: var(--drop); background-size: auto, auto;
+}
+
+/* Pressing paper pushes it into the desk. */
+.slip-btn, .bundle-btn, .chip, .fab span { transition: transform .12s ease-out; }
+.slip-btn:active { transform: translateY(1px) scale(.985); }
+.chip:active { transform: scale(.95); }
+
+/* Toasts spring up and drop away. */
+#toast { transition: opacity .2s ease-in, transform .25s ease-in; transform: translate(-50%, 24px); }
+#toast.show { transition: opacity .15s ease-out, transform .38s cubic-bezier(.3, 1.6, .5, 1); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .slip { transform: none; }

@@ -53,6 +53,31 @@ function countUp(el, from, to, cur) {
   setTimeout(() => { if (el.isConnected) el.textContent = C.formatMoney(to, cur); }, dur + 50);
 }
 
+/** Send a little slip of paper flying up off the screen from a button. */
+function flyOff(rect) {
+  if (!rect || calm()) return;
+  const el = document.createElement('div');
+  el.className = 'flyer ruled';
+  el.setAttribute('aria-hidden', 'true');
+  el.style.left = `${rect.left + rect.width / 2 - 28}px`;
+  el.style.top = `${rect.top + rect.height / 2 - 18}px`;
+  document.body.append(el);
+  el.animate([
+    { transform: 'translateY(0) rotate(0) scale(1)', opacity: 1 },
+    { offset: 0.25, transform: 'translateY(12px) rotate(4deg) scale(1.05)', opacity: 1 },
+    { transform: `translate(${(Math.random() - 0.5) * 80}px, ${-rect.top - 120}px) rotate(-18deg) scale(.7)`, opacity: 0 },
+  ], { duration: 700, easing: 'cubic-bezier(.5,0,.75,.4)', fill: 'forwards' }).finished.then(() => el.remove());
+}
+
+/** Give an element a quick head-shake. */
+function shake(el) {
+  if (!el || calm()) return;
+  el.animate(
+    [0, -7, 6, -4, 3, 0].map((x) => ({ transform: `translateX(${x}px)` })),
+    { duration: 360, easing: 'ease-out' },
+  );
+}
+
 /** Rip a slip on screen into two halves, then close the gap it leaves. */
 async function tearUp(el) {
   if (!el || calm()) return;
@@ -155,6 +180,8 @@ function route() {
 const go = (hash) => { if (location.hash === hash) render(); else location.hash = hash; };
 
 let lastRouteKey = '';
+let lastRoute = null;
+const TABS = ['slips', 'tally', 'pass', 'trip'];
 function render() {
   const r = route();
   const app = $('#app');
@@ -175,7 +202,24 @@ function render() {
 
   if (entered) window.scrollTo(0, 0);
   lastRouteKey = key;
+  const was = lastRoute;
+  lastRoute = r;
+  if (!calm() && entered && tabs) {
+    const body = $('.tab-body', app);
+    if (was?.view === 'trip' && was.g === r.g && was.tab !== r.tab) {
+      // Slide in from the side of the tab that was tapped.
+      body?.classList.add(TABS.indexOf(r.tab) > TABS.indexOf(was.tab) ? 'from-right' : 'from-left');
+    } else dealIn();
+  } else if (!calm() && entered && r.view === 'home' && (!was || was.view === 'trip')) dealIn();
   afterRender(r, entered);
+}
+
+/** Deal the first few slips (or bundles) onto the desk one after another. */
+function dealIn() {
+  $$('#app .slip, #app .bundle').slice(0, 8).forEach((el, i) => {
+    el.style.setProperty('--n', i);
+    el.classList.add('deal');
+  });
 }
 
 /** Start the animations the last change asked for. */
@@ -334,7 +378,7 @@ function tripView(g, tab) {
       <a class="icon-btn" href="#/" aria-label="All trips">‹</a>
       <h1>${esc(st.group.name)}<span class="sub">${esc(st.memberOrder.map((id) => st.members[id].name).join(' · '))}</span></h1>
     </header>
-    ${body(g, st)}
+    <div class="tab-body">${body(g, st)}</div>
     ${tab === 'slips' ? `<button class="fab" data-act="new-slip" aria-label="Add a slip"><span>+ seetu</span></button>` : ''}
     <div class="tabbar"><nav>
       ${T('slips', '✎', 'Slips')}
@@ -781,7 +825,7 @@ function splitSecHTML(st) {
     const nm = esc(st.members[id].name);
     if (m === 'equal') {
       return `<div class="person toggle" role="checkbox" tabindex="0" aria-checked="${draft.equal.has(id)}" data-act="toggle-eq" data-id="${esc(id)}">
-        <span class="check" aria-hidden="true">✓</span><span class="name">${nm}</span><span class="calc" data-calc="${esc(id)}"></span></div>`;
+        <span class="check" aria-hidden="true">✓</span><span class="name"><span class="nm">${nm}</span></span><span class="calc" data-calc="${esc(id)}"></span></div>`;
     }
     return `<div class="person">
       <span class="name">${nm}</span>
@@ -995,6 +1039,8 @@ async function saveDraft() {
   if (res.error) {
     $('#form-err').textContent = res.error;
     toast(res.error);
+    shake($('#form-err'));
+    $$('.sheet .hint.bad:not(#form-err)').forEach(shake);
     return;
   }
   const { g, isNew, prev, kind } = draft;
@@ -1054,9 +1100,11 @@ function pileFile(g) {
   return new File([JSON.stringify(bundle)], name, { type: 'application/json' });
 }
 
-function sendPile(g) {
+function sendPile(g, from) {
   const sentClock = S.clock;
+  const rect = from?.getBoundingClientRect();
   shareOrDownload(pileFile(g), async () => {
+    flyOff(rect);
     S.sentAt[g] = sentClock;
     await DB.setMeta(`sent:${g}`, sentClock);
     render();
@@ -1291,7 +1339,11 @@ async function openQrScan() {
   const showPieces = () => {
     const el = $('#scan-pieces');
     if (!el) return;
-    el.innerHTML = Array.from({ length: asm.count }, (_, i) => `<i class="${asm.pieces.has(i) ? 'got' : ''}"></i>`).join('');
+    if (el.children.length === asm.count) {
+      [...el.children].forEach((p, i) => p.classList.toggle('got', asm.pieces.has(i)));
+    } else {
+      el.innerHTML = Array.from({ length: asm.count }, (_, i) => `<i class="${asm.pieces.has(i) ? 'got' : ''}"></i>`).join('');
+    }
     status(asm.count === 1 ? 'Got it' : `${asm.have} of ${asm.count} pieces`);
   };
 
@@ -1301,6 +1353,11 @@ async function openQrScan() {
     status('Got every piece — unfolding…', 'good');
     try {
       const text = await Q.unpack(asm.bytes());
+      const pieces = $('#scan-pieces');
+      if (pieces && asm.count > 1 && !calm()) {
+        pieces.classList.add('done');
+        await wait(520);
+      }
       closeSheet();
       await importTexts([{ name: 'QR pile', text }]);
     } catch (e) {
@@ -1406,14 +1463,16 @@ const ACT = {
   'pay-from'(el) { draft.from = el.dataset.id; pressOnly(el); },
   'pay-to'(el) { draft.to = el.dataset.id; pressOnly(el); },
 
-  send() { sendPile(route().g); },
+  send(el) { sendPile(route().g, el); },
   'qr-show'() { openQrShow(route().g); },
   'qr-scan'() { openQrScan(); },
-  async 'qr-done'() {
+  async 'qr-done'(el) {
     // Someone scanned it: what this phone wrote up to now counts as passed around.
     const ctl = qrShow;
+    const rect = el.getBoundingClientRect();
     closeSheet();
     if (!ctl) return;
+    flyOff(rect);
     S.sentAt[ctl.g] = Math.max(S.sentAt[ctl.g] || 0, ctl.openedAt);
     await DB.setMeta(`sent:${ctl.g}`, S.sentAt[ctl.g]);
     render();
@@ -1491,6 +1550,17 @@ document.addEventListener('click', (e) => {
   if (!el || !ACT[el.dataset.act]) return;
   e.preventDefault();
   Promise.resolve(ACT[el.dataset.act](el, e)).catch((err) => { console.error(err); toast(`Something went wrong: ${err.message}`); });
+});
+
+// Opening a trip: fan its bundle of slips out a little first.
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('.bundle-btn');
+  if (!a || calm() || e.metaKey || e.ctrlKey || e.shiftKey) return;
+  e.preventDefault();
+  const bundle = a.closest('.bundle');
+  if (bundle.classList.contains('opening')) return;
+  bundle.classList.add('opening');
+  setTimeout(() => go(a.getAttribute('href')), 230);
 });
 
 document.addEventListener('keydown', (e) => {
