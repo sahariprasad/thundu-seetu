@@ -30,6 +30,55 @@ function tilt(id) {
   return ((Math.abs(h) % 9) - 4) * 0.18;
 }
 
+// ---------------------------------------------------------------- motion
+
+const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+/** What the next render should animate, and what the tally last showed. */
+const fx = { drop: null, dropNew: false, shown: {} };
+
+/** Roll a money figure from one amount to another. */
+function countUp(el, from, to, cur) {
+  if (calm() || from === to) return;
+  const t0 = performance.now(), dur = 700;
+  const step = (now) => {
+    if (!el.isConnected) return;
+    const p = Math.min(1, (now - t0) / dur);
+    el.textContent = C.formatMoney(Math.round(from + (to - from) * (1 - (1 - p) ** 3)), cur);
+    if (p < 1) requestAnimationFrame(step);
+  };
+  el.textContent = C.formatMoney(from, cur);
+  requestAnimationFrame(step);
+  // Frames pause while the app is in the background; never leave a half-counted figure.
+  setTimeout(() => { if (el.isConnected) el.textContent = C.formatMoney(to, cur); }, dur + 50);
+}
+
+/** Rip a slip on screen into two halves, then close the gap it leaves. */
+async function tearUp(el) {
+  if (!el || calm()) return;
+  const b = el.getBoundingClientRect();
+  if (b.bottom < 0 || b.top > innerHeight) return;
+  const left = el.firstElementChild;
+  const right = left.cloneNode(true);
+  right.removeAttribute('data-act');
+  el.classList.add('tearing');
+  left.classList.add('half-l');
+  right.classList.add('half-r');
+  el.append(right);
+  const opts = { duration: 520, easing: 'cubic-bezier(.45,0,.7,1)', fill: 'forwards' };
+  const away = (dx, dy, r) => [
+    { transform: 'none', opacity: 1 },
+    { offset: 0.22, transform: `translateX(${dx / 12}px) rotate(${r / 8}deg)`, opacity: 1 },
+    { transform: `translate(${dx}px, ${dy}px) rotate(${r}deg)`, opacity: 0 },
+  ];
+  left.animate(away(-30, 16, -9), opts);
+  await right.animate(away(30, 24, 8), opts).finished;
+  await el.animate(
+    [{ height: `${el.offsetHeight}px`, marginBottom: '14px' }, { height: '0px', marginBottom: '0px' }],
+    { duration: 220, easing: 'ease-in-out', fill: 'forwards' },
+  ).finished;
+}
+
 let toastTimer;
 function toast(msg) {
   const el = $('#toast');
@@ -117,13 +166,37 @@ function render() {
   else if (!meOf(r.g)) html = whoAmIView(r.g);
   else { html = tripView(r.g, r.tab); tabs = true; }
 
+  const key = `${r.view}/${r.g}/${r.tab}`;
+  const entered = key !== lastRouteKey;
   app.innerHTML = html;
   app.classList.toggle('no-tabs', !tabs);
+  app.classList.toggle('entered', entered);
   document.title = r.view === 'trip' ? `${state(r.g).group.name} · thundu seetu` : 'thundu seetu';
 
-  const key = `${r.view}/${r.g}/${r.tab}`;
-  if (key !== lastRouteKey) window.scrollTo(0, 0);
+  if (entered) window.scrollTo(0, 0);
   lastRouteKey = key;
+  afterRender(r, entered);
+}
+
+/** Start the animations the last change asked for. */
+function afterRender(r, entered) {
+  if (fx.drop) {
+    const el = $(`.slip[data-id="${CSS.escape(fx.drop)}"]`);
+    if (el) {
+      el.classList.add(fx.dropNew ? 'drop' : 'settle');
+      const b = el.getBoundingClientRect();
+      if (b.top < 0 || b.bottom > innerHeight - 90) el.scrollIntoView({ block: 'center', behavior: calm() ? 'auto' : 'smooth' });
+    }
+    fx.drop = null;
+  }
+  if (r.view === 'trip' && r.tab === 'tally') {
+    const big = $('.standing .big[data-count]');
+    const now = big ? Number(big.dataset.count) : 0;
+    let was = entered ? 0 : fx.shown[r.g] ?? 0;
+    if (Math.sign(was) !== Math.sign(now)) was = 0;
+    if (big) countUp($('.num', big), Math.abs(was), Math.abs(now), big.dataset.cur);
+    fx.shown[r.g] = now;
+  }
 }
 
 // ================================================================ home
@@ -340,7 +413,7 @@ function slipCard(s, { st, me, sentAt, invalid }) {
 
   const icon = isPay ? '🤝' : C.CATEGORIES[s.category]?.icon ?? '📎';
   return `
-    <div class="slip ${isPay ? 'payment' : ''}" style="--tilt:${tilt(s.id)}deg">
+    <div class="slip ${isPay ? 'payment' : ''}" data-id="${esc(s.id)}" style="--tilt:${tilt(s.id)}deg">
       <button class="slip-btn" data-act="edit-slip" data-id="${esc(s.id)}">
         <div class="paper torn">
           <div class="slip-row">
@@ -370,10 +443,11 @@ function tallyView(g, st) {
   const money = (m, cur = t.base) => C.formatMoney(m, cur);
   const my = t.net[me] || 0;
 
+  const bigNum = (cls) => `<div class="big ${cls}" data-count="${my}" data-cur="${t.base}"><span class="sr">${money(Math.abs(my))}</span><span class="num" aria-hidden="true">${money(Math.abs(my))}</span></div>`;
   const standing = my > 0
-    ? `<div class="hand">You get back</div><div class="big owed">${money(my)}</div>`
+    ? `<div class="hand">You get back</div>${bigNum('owed')}`
     : my < 0
-      ? `<div class="hand">You owe</div><div class="big owe">${money(-my)}</div>`
+      ? `<div class="hand">You owe</div>${bigNum('owe')}`
       : `<div class="hand">You're all square</div><div class="big">✓</div>`;
 
   const notes = [];
@@ -397,12 +471,12 @@ function tallyView(g, st) {
   }).join('');
 
   const maxAbs = Math.max(1, ...Object.values(t.net).map(Math.abs));
-  const bars = st.memberOrder.map((id) => {
+  const bars = st.memberOrder.map((id, i) => {
     const v = t.net[id];
     const w = (Math.abs(v) / maxAbs) * 50;
     return `<div class="bar-row">
       <span class="name">${name(id)}</span>
-      <span class="bar"><i class="${v >= 0 ? 'pos' : 'neg'}" style="width:${w}%"></i></span>
+      <span class="bar"><i class="${v >= 0 ? 'pos' : 'neg'}" style="width:${w}%;--i:${i}"></i></span>
       <span class="val ${v > 0 ? 'owed' : v < 0 ? 'owe' : 'muted'}">${v ? money(v, t.base).replace(/^/, v > 0 ? '+' : '') : '—'}</span>
     </div>`;
   }).join('');
@@ -439,10 +513,10 @@ function tallyView(g, st) {
         <tr><th></th><th>Paid</th><th>Their share</th></tr>
         ${st.memberOrder.map((id) => `<tr><td>${name(id)}</td><td>${money(t.paid[id])}</td><td>${money(t.share[id])}</td></tr>`).join('')}
       </table>
-      ${cats.length ? `<div style="margin-top:16px">${cats.map(([k, v]) => `
+      ${cats.length ? `<div style="margin-top:16px">${cats.map(([k, v], i) => `
         <div style="margin:10px 0">
           <div class="row" style="justify-content:space-between"><span>${C.CATEGORIES[k].icon} ${C.CATEGORIES[k].label}</span><span class="type small">${money(v)}</span></div>
-          <div class="cat-bar"><i style="width:${(v / maxCat) * 100}%"></i></div>
+          <div class="cat-bar"><i style="width:${(v / maxCat) * 100}%;--i:${i}"></i></div>
         </div>`).join('')}</div>` : ''}
       <div style="margin-top:14px"><button class="btn ghost sm" data-act="csv">Export as spreadsheet (CSV)</button></div>
     </div></div>`;
@@ -576,7 +650,20 @@ function closeSheet() {
   sheetCleanup?.();
   sheetCleanup = null;
   draft = null;
-  $('#sheet-root').innerHTML = '';
+  const root = $('#sheet-root');
+  if (root.children.length && !calm()) {
+    // Let the old sheet slide away on its own layer, so a new one can open at once.
+    const scrolls = $$('.sheet', root).map((el) => el.scrollTop);
+    const leaving = document.createElement('div');
+    leaving.className = 'sheet-leaving';
+    leaving.inert = true;
+    leaving.setAttribute('aria-hidden', 'true');
+    leaving.append(...root.childNodes);
+    $$('[id]', leaving).forEach((el) => el.removeAttribute('id'));
+    document.body.append(leaving);
+    $$('.sheet', leaving).forEach((el, i) => { el.scrollTop = scrolls[i]; });
+    setTimeout(() => leaving.remove(), 260);
+  } else root.innerHTML = '';
   document.body.style.overflow = '';
 }
 
@@ -901,7 +988,9 @@ function buildPayment() {
   return err ? { error: err } : { slip };
 }
 
+let saving = false;
 async function saveDraft() {
+  if (saving || !draft) return;
   const res = draft.kind === 'payment' ? buildPayment() : buildSlip();
   if (res.error) {
     $('#form-err').textContent = res.error;
@@ -909,11 +998,23 @@ async function saveDraft() {
     return;
   }
   const { g, isNew, prev, kind } = draft;
-  await emit(g, [['slip.put', { slip: res.slip, prev }]]);
-  if (kind === 'expense') {
-    S.lastCur[g] = res.slip.currency;
-    DB.setMeta(`cur:${g}`, res.slip.currency);
+  saving = true;
+  try {
+    await emit(g, [['slip.put', { slip: res.slip, prev }]]);
+    if (kind === 'expense') {
+      S.lastCur[g] = res.slip.currency;
+      DB.setMeta(`cur:${g}`, res.slip.currency);
+    }
+    const form = $('#pay-form');
+    if (kind === 'payment' && isNew && form && !calm()) {
+      form.insertAdjacentHTML('beforeend', '<span class="stamp slam" aria-hidden="true">PAID</span>');
+      await wait(650);
+    }
+  } finally {
+    saving = false;
   }
+  fx.drop = res.slip.id;
+  fx.dropNew = isNew;
   closeSheet();
   render();
   toast(kind === 'payment' ? (isNew ? 'Payment noted' : 'Payment updated') : isNew ? 'Slip added to the pile' : 'Slip updated');
@@ -1262,9 +1363,15 @@ const ACT = {
     const st = state(draft.g);
     if (!confirm('Tear up this slip? Others will see it torn up once you pass piles around.')) return;
     const { g, id } = draft;
-    await emit(g, [['slip.delete', { id, prev: st.slips[id]?.eventId }]]);
     closeSheet();
-    render();
+    try {
+      await Promise.all([
+        emit(g, [['slip.delete', { id, prev: st.slips[id]?.eventId }]]),
+        tearUp($(`.slip[data-id="${CSS.escape(id)}"]`)),
+      ]);
+    } finally {
+      render();
+    }
     toast('Torn up');
   },
 

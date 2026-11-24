@@ -441,6 +441,71 @@ input[type="date"].line-in { font-family: var(--ui); font-size: 16px; min-height
 }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 
+/* ------------------------------------------------------------ motion */
+
+.sr {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
+.standing .big { font-variant-numeric: tabular-nums; }
+
+/* A new slip drops onto the pile; an edited one gives a little wiggle. */
+.slip.drop { animation: drop .52s cubic-bezier(.25, .8, .35, 1.05) both; }
+@keyframes drop {
+  0%   { opacity: 0; transform: translateY(-44px) rotate(calc(var(--tilt, 0deg) + 5deg)) scale(1.05); }
+  55%  { opacity: 1; transform: translateY(4px) rotate(calc(var(--tilt, 0deg) - 1.2deg)) scale(1); }
+  80%  { transform: translateY(-1px) rotate(calc(var(--tilt, 0deg) + .4deg)); }
+  100% { transform: rotate(var(--tilt, 0deg)); }
+}
+.slip.settle { animation: settle .45s ease-out; }
+@keyframes settle {
+  30% { transform: rotate(calc(var(--tilt, 0deg) - 1.6deg)) scale(1.015); }
+  65% { transform: rotate(calc(var(--tilt, 0deg) + .8deg)); }
+}
+
+/* Tearing up: two halves along a ragged line. */
+.slip.tearing { position: relative; pointer-events: none; }
+.slip.tearing .half-l {
+  clip-path: polygon(0 0, 51% 0, 48% 12%, 53% 24%, 47% 37%, 52% 50%, 48% 63%, 53% 76%, 47% 88%, 51% 100%, 0 100%);
+}
+.slip.tearing .half-r {
+  position: absolute; inset: 0;
+  clip-path: polygon(51% 0, 100% 0, 100% 100%, 51% 100%, 47% 88%, 53% 76%, 48% 63%, 52% 50%, 47% 37%, 53% 24%, 48% 12%);
+}
+
+/* Sheets slide back down when closed. */
+.sheet-leaving { pointer-events: none; }
+.sheet-leaving .sheet-backdrop { animation: fade-out .22s ease-in forwards; }
+.sheet-leaving .sheet { animation: sink .24s cubic-bezier(.5, 0, .75, 0) forwards; }
+@keyframes fade-out { to { opacity: 0; } }
+@keyframes sink { to { transform: translateY(100%); opacity: .4; } }
+
+/* PAID stamp presses down. */
+.stamp { --stamp-t: rotate(-8deg); transform: var(--stamp-t); }
+.slip.drop .stamp { animation: stamp .38s .42s cubic-bezier(.3, .7, .4, 1) both; }
+.stamp.slam {
+  --stamp-t: translateX(-50%) rotate(-12deg);
+  position: absolute; z-index: 3; left: 50%; top: 130px; right: auto; bottom: auto;
+  font-size: 34px; letter-spacing: 6px; border-width: 4px; border-radius: 8px; padding: 2px 18px;
+  opacity: .85; pointer-events: none;
+  animation: stamp .36s cubic-bezier(.3, .7, .4, 1) both;
+}
+@keyframes stamp {
+  0%   { opacity: 0; transform: var(--stamp-t) scale(2.2); }
+  55%  { opacity: .95; transform: var(--stamp-t) scale(.92); }
+  100% { transform: var(--stamp-t) scale(1); }
+}
+
+/* Tally bars grow out from the middle line when the tab opens. */
+.bar i.pos { transform-origin: left; }
+.bar i.neg { transform-origin: right; }
+.cat-bar i { transform-origin: left; }
+.entered .bar i, .entered .cat-bar i {
+  animation: grow .55s cubic-bezier(.2, .8, .3, 1) both;
+  animation-delay: calc(var(--i, 0) * 60ms + 150ms);
+}
+@keyframes grow { from { transform: scaleX(0); } }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .slip { transform: none; }
