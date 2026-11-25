@@ -34,13 +34,16 @@ function tilt(id) {
 
 const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+/** How much slower than the base timings to run (the --slow setting in styles.css). */
+const SLOW = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--slow')) || 1;
+const ms = (t) => t * SLOW;
 /** What the next render should animate, and what the tally last showed. */
 const fx = { drop: null, dropNew: false, shown: {} };
 
 /** Roll a money figure from one amount to another. */
 function countUp(el, from, to, cur) {
   if (calm() || from === to) return;
-  const t0 = performance.now(), dur = 700;
+  const t0 = performance.now(), dur = ms(700);
   const step = (now) => {
     if (!el.isConnected) return;
     const p = Math.min(1, (now - t0) / dur);
@@ -66,7 +69,7 @@ function flyOff(rect) {
     { transform: 'translateY(0) rotate(0) scale(1)', opacity: 1 },
     { offset: 0.25, transform: 'translateY(12px) rotate(4deg) scale(1.05)', opacity: 1 },
     { transform: `translate(${(Math.random() - 0.5) * 80}px, ${-rect.top - 120}px) rotate(-18deg) scale(.7)`, opacity: 0 },
-  ], { duration: 700, easing: 'cubic-bezier(.5,0,.75,.4)', fill: 'forwards' }).finished.then(() => el.remove());
+  ], { duration: ms(700), easing: 'cubic-bezier(.5,0,.75,.4)', fill: 'forwards' }).finished.then(() => el.remove());
 }
 
 /** Give an element a quick head-shake. */
@@ -74,7 +77,7 @@ function shake(el) {
   if (!el || calm()) return;
   el.animate(
     [0, -7, 6, -4, 3, 0].map((x) => ({ transform: `translateX(${x}px)` })),
-    { duration: 360, easing: 'ease-out' },
+    { duration: ms(360), easing: 'ease-out' },
   );
 }
 
@@ -90,7 +93,7 @@ async function tearUp(el) {
   left.classList.add('half-l');
   right.classList.add('half-r');
   el.append(right);
-  const opts = { duration: 520, easing: 'cubic-bezier(.45,0,.7,1)', fill: 'forwards' };
+  const opts = { duration: ms(520), easing: 'cubic-bezier(.45,0,.7,1)', fill: 'forwards' };
   const away = (dx, dy, r) => [
     { transform: 'none', opacity: 1 },
     { offset: 0.22, transform: `translateX(${dx / 12}px) rotate(${r / 8}deg)`, opacity: 1 },
@@ -100,7 +103,7 @@ async function tearUp(el) {
   await right.animate(away(30, 24, 8), opts).finished;
   await el.animate(
     [{ height: `${el.offsetHeight}px`, marginBottom: '14px' }, { height: '0px', marginBottom: '0px' }],
-    { duration: 220, easing: 'ease-in-out', fill: 'forwards' },
+    { duration: ms(220), easing: 'ease-in-out', fill: 'forwards' },
   ).finished;
 }
 
@@ -706,7 +709,7 @@ function closeSheet() {
     $$('[id]', leaving).forEach((el) => el.removeAttribute('id'));
     document.body.append(leaving);
     $$('.sheet', leaving).forEach((el, i) => { el.scrollTop = scrolls[i]; });
-    setTimeout(() => leaving.remove(), 260);
+    setTimeout(() => leaving.remove(), ms(260));
   } else root.innerHTML = '';
   document.body.style.overflow = '';
 }
@@ -1054,7 +1057,7 @@ async function saveDraft() {
     const form = $('#pay-form');
     if (kind === 'payment' && isNew && form && !calm()) {
       form.insertAdjacentHTML('beforeend', '<span class="stamp slam" aria-hidden="true">PAID</span>');
-      await wait(650);
+      await wait(ms(650));
     }
   } finally {
     saving = false;
@@ -1356,7 +1359,7 @@ async function openQrScan() {
       const pieces = $('#scan-pieces');
       if (pieces && asm.count > 1 && !calm()) {
         pieces.classList.add('done');
-        await wait(520);
+        await wait(ms(520));
       }
       closeSheet();
       await importTexts([{ name: 'QR pile', text }]);
@@ -1560,7 +1563,7 @@ document.addEventListener('click', (e) => {
   const bundle = a.closest('.bundle');
   if (bundle.classList.contains('opening')) return;
   bundle.classList.add('opening');
-  setTimeout(() => go(a.getAttribute('href')), 230);
+  setTimeout(() => go(a.getAttribute('href')), ms(230));
 });
 
 document.addEventListener('keydown', (e) => {

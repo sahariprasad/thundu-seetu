@@ -25,6 +25,7 @@
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
   color-scheme: light dark;
+  --slow: 1.5;   /* multiplies every animation timing; JS reads it too */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -287,14 +288,14 @@ input[type="date"].line-in { font-family: var(--ui); font-size: 16px; min-height
 
 .sheet-backdrop {
   position: fixed; inset: 0; z-index: 30; background: rgba(30, 25, 15, .38);
-  animation: fade .18s ease-out;
+  animation: fade calc(.18s * var(--slow)) ease-out;
 }
 .sheet {
   position: fixed; z-index: 31; left: 0; right: 0; bottom: 0;
   max-width: 560px; margin: 0 auto;
   max-height: calc(100dvh - var(--safe-t) - 12px); overflow-y: auto; -webkit-overflow-scrolling: touch;
   border-radius: 14px 14px 0 0; box-shadow: 0 -6px 30px rgba(0,0,0,.25);
-  animation: rise .24s cubic-bezier(.2, .8, .3, 1);
+  animation: rise calc(.24s * var(--slow)) cubic-bezier(.2, .8, .3, 1);
   padding: 0 16px calc(var(--safe-b) + 24px) 54px;
 }
 .sheet-head {
@@ -426,7 +427,7 @@ input[type="date"].line-in { font-family: var(--ui); font-size: 16px; min-height
 .pieces { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
 .pieces i {
   width: 11px; height: 15px; background: var(--paper-edge); border-radius: 1px;
-  transition: background .15s, transform .15s;
+  transition: background calc(.15s * var(--slow)), transform calc(.15s * var(--slow));
 }
 .pieces i.got { background: var(--ink); transform: rotate(-4deg); }
 
@@ -437,7 +438,7 @@ input[type="date"].line-in { font-family: var(--ui); font-size: 16px; min-height
   transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
   background: var(--ink); color: var(--paper); padding: 10px 16px; border-radius: 12px;
   font-size: 15px; max-width: calc(100vw - 32px); width: max-content;
-  transition: opacity .2s, transform .2s;
+  transition: opacity calc(.2s * var(--slow)), transform calc(.2s * var(--slow));
 }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 
@@ -450,14 +451,14 @@ input[type="date"].line-in { font-family: var(--ui); font-size: 16px; min-height
 .standing .big { font-variant-numeric: tabular-nums; }
 
 /* A new slip drops onto the pile; an edited one gives a little wiggle. */
-.slip.drop { animation: drop .52s cubic-bezier(.25, .8, .35, 1.05) both; }
+.slip.drop { animation: drop calc(.52s * var(--slow)) cubic-bezier(.25, .8, .35, 1.05) both; }
 @keyframes drop {
   0%   { opacity: 0; transform: translateY(-44px) rotate(calc(var(--tilt, 0deg) + 5deg)) scale(1.05); }
   55%  { opacity: 1; transform: translateY(4px) rotate(calc(var(--tilt, 0deg) - 1.2deg)) scale(1); }
   80%  { transform: translateY(-1px) rotate(calc(var(--tilt, 0deg) + .4deg)); }
   100% { transform: rotate(var(--tilt, 0deg)); }
 }
-.slip.settle { animation: settle .45s ease-out; }
+.slip.settle { animation: settle calc(.45s * var(--slow)) ease-out; }
 @keyframes settle {
   30% { transform: rotate(calc(var(--tilt, 0deg) - 1.6deg)) scale(1.015); }
   65% { transform: rotate(calc(var(--tilt, 0deg) + .8deg)); }
@@ -475,20 +476,20 @@ input[type="date"].line-in { font-family: var(--ui); font-size: 16px; min-height
 
 /* Sheets slide back down when closed. */
 .sheet-leaving { pointer-events: none; }
-.sheet-leaving .sheet-backdrop { animation: fade-out .22s ease-in forwards; }
-.sheet-leaving .sheet { animation: sink .24s cubic-bezier(.5, 0, .75, 0) forwards; }
+.sheet-leaving .sheet-backdrop { animation: fade-out calc(.22s * var(--slow)) ease-in forwards; }
+.sheet-leaving .sheet { animation: sink calc(.24s * var(--slow)) cubic-bezier(.5, 0, .75, 0) forwards; }
 @keyframes fade-out { to { opacity: 0; } }
 @keyframes sink { to { transform: translateY(100%); opacity: .4; } }
 
 /* PAID stamp presses down. */
 .stamp { --stamp-t: rotate(-8deg); transform: var(--stamp-t); }
-.slip.drop .stamp { animation: stamp .38s .42s cubic-bezier(.3, .7, .4, 1) both; }
+.slip.drop .stamp { animation: stamp calc(.38s * var(--slow)) calc(.42s * var(--slow)) cubic-bezier(.3, .7, .4, 1) both; }
 .stamp.slam {
   --stamp-t: translateX(-50%) rotate(-12deg);
   position: absolute; z-index: 3; left: 50%; top: 130px; right: auto; bottom: auto;
   font-size: 34px; letter-spacing: 6px; border-width: 4px; border-radius: 8px; padding: 2px 18px;
   opacity: .85; pointer-events: none;
-  animation: stamp .36s cubic-bezier(.3, .7, .4, 1) both;
+  animation: stamp calc(.36s * var(--slow)) cubic-bezier(.3, .7, .4, 1) both;
 }
 @keyframes stamp {
   0%   { opacity: 0; transform: var(--stamp-t) scale(2.2); }
@@ -501,21 +502,21 @@ input[type="date"].line-in { font-family: var(--ui); font-size: 16px; min-height
 .bar i.neg { transform-origin: right; }
 .cat-bar i { transform-origin: left; }
 .entered .bar i, .entered .cat-bar i {
-  animation: grow .55s cubic-bezier(.2, .8, .3, 1) both;
-  animation-delay: calc(var(--i, 0) * 60ms + 150ms);
+  animation: grow calc(.55s * var(--slow)) cubic-bezier(.2, .8, .3, 1) both;
+  animation-delay: calc(var(--i, 0) * calc(60ms * var(--slow)) + calc(150ms * var(--slow)));
 }
 @keyframes grow { from { transform: scaleX(0); } }
 
 /* Tabs slide in from the side that was tapped. */
-.tab-body.from-right { animation: from-right .28s cubic-bezier(.2, .8, .3, 1); }
-.tab-body.from-left  { animation: from-left .28s cubic-bezier(.2, .8, .3, 1); }
+.tab-body.from-right { animation: from-right calc(.28s * var(--slow)) cubic-bezier(.2, .8, .3, 1); }
+.tab-body.from-left  { animation: from-left calc(.28s * var(--slow)) cubic-bezier(.2, .8, .3, 1); }
 @keyframes from-right { from { opacity: 0; transform: translateX(28px); } }
 @keyframes from-left  { from { opacity: 0; transform: translateX(-28px); } }
 
 /* Slips (and trip bundles) are dealt onto the desk one after another. */
 .slip.deal, .bundle.deal {
-  animation: deal .42s cubic-bezier(.2, .8, .3, 1) both;
-  animation-delay: calc(var(--n, 0) * 45ms);
+  animation: deal calc(.42s * var(--slow)) cubic-bezier(.2, .8, .3, 1) both;
+  animation-delay: calc(var(--n, 0) * calc(45ms * var(--slow)));
 }
 @keyframes deal {
   from { opacity: 0; transform: translateY(18px) rotate(calc(var(--tilt, 0deg) - 2deg)); }
@@ -523,17 +524,17 @@ input[type="date"].line-in { font-family: var(--ui); font-size: 16px; min-height
 }
 
 /* Opening a trip fans its bundle out. */
-.bundle::before, .bundle::after, .bundle-btn { transition: transform .22s cubic-bezier(.3, .7, .4, 1.3); }
+.bundle::before, .bundle::after, .bundle-btn { transition: transform calc(.22s * var(--slow)) cubic-bezier(.3, .7, .4, 1.3); }
 .bundle.opening::before { transform: rotate(6deg) translate(12px, 6px); }
 .bundle.opening::after  { transform: rotate(-5deg) translate(-12px, 4px); }
 .bundle.opening .bundle-btn { transform: translateY(-4px) scale(1.02); }
 
 /* Booting: the waiting line rocks gently. */
-.boot { animation: wobble 1.6s ease-in-out infinite; }
+.boot { animation: wobble calc(1.6s * var(--slow)) ease-in-out infinite; }
 @keyframes wobble { 0%, 100% { transform: rotate(-1.5deg); } 50% { transform: rotate(1.5deg); } }
 
 /* Empty pile: the lone slip floats. */
-.empty .slip { animation: float 4.5s ease-in-out infinite; }
+.empty .slip { animation: float calc(4.5s * var(--slow)) ease-in-out infinite; }
 @keyframes float {
   0%, 100% { transform: translateY(0) rotate(var(--tilt, 0deg)); }
   50%      { transform: translateY(-5px) rotate(calc(var(--tilt, 0deg) - .6deg)); }
@@ -544,15 +545,15 @@ input[type="date"].line-in { font-family: var(--ui); font-size: 16px; min-height
 .person .nm {
   background: linear-gradient(var(--faint), var(--faint)) no-repeat 0 58% / 0 1.5px;
   -webkit-box-decoration-break: clone; box-decoration-break: clone;
-  transition: background-size .28s ease-out, color .2s;
+  transition: background-size calc(.28s * var(--slow)) ease-out, color calc(.2s * var(--slow));
 }
 .person[aria-checked="false"] .nm { background-size: 100% 1.5px; }
 
 /* QR pieces pop in as they're caught, then gather into one stack. */
-.pieces i.got { animation: pop .3s cubic-bezier(.3, 1.6, .5, 1); }
+.pieces i.got { animation: pop calc(.3s * var(--slow)) cubic-bezier(.3, 1.6, .5, 1); }
 @keyframes pop { 0% { transform: scale(.4); } 60% { transform: scale(1.35) rotate(-8deg); } }
-.pieces { transition: gap .45s ease-in-out; }
-.pieces i { transition: background .15s, transform .45s ease-in-out, margin .45s ease-in-out; }
+.pieces { transition: gap calc(.45s * var(--slow)) ease-in-out; }
+.pieces i { transition: background calc(.15s * var(--slow)), transform calc(.45s * var(--slow)) ease-in-out, margin calc(.45s * var(--slow)) ease-in-out; }
 .pieces.done { gap: 4px 0; }
 .pieces.done i { margin-left: -8px; }
 .pieces.done i:nth-child(3n)   { transform: rotate(5deg); }
@@ -565,13 +566,13 @@ input[type="date"].line-in { font-family: var(--ui); font-size: 16px; min-height
 }
 
 /* Pressing paper pushes it into the desk. */
-.slip-btn, .bundle-btn, .chip, .fab span { transition: transform .12s ease-out; }
+.slip-btn, .bundle-btn, .chip, .fab span { transition: transform calc(.12s * var(--slow)) ease-out; }
 .slip-btn:active { transform: translateY(1px) scale(.985); }
 .chip:active { transform: scale(.95); }
 
 /* Toasts spring up and drop away. */
-#toast { transition: opacity .2s ease-in, transform .25s ease-in; transform: translate(-50%, 24px); }
-#toast.show { transition: opacity .15s ease-out, transform .38s cubic-bezier(.3, 1.6, .5, 1); }
+#toast { transition: opacity calc(.2s * var(--slow)) ease-in, transform calc(.25s * var(--slow)) ease-in; transform: translate(-50%, 24px); }
+#toast.show { transition: opacity calc(.15s * var(--slow)) ease-out, transform calc(.38s * var(--slow)) cubic-bezier(.3, 1.6, .5, 1); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
